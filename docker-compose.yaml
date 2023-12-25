@@ -1,0 +1,152 @@
+version: '3.8'
+
+x-resource-limits: &resource-limits
+  resources:
+    limits:
+      cpus: '0.5'
+      memory: 50M
+
+services:
+  zookeeper1:
+    image: wurstmeister/zookeeper:latest
+    hostname: zookeeper1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_DATA_DIR: /data
+      ZOO_DATA_LOG_DIR: /datalog
+      ZOO_SERVERS: &zoo-servers
+        server.1=zookeeper1:2888:3888 server.2=zookeeper2:2888:3888 server.3=zookeeper3:2888:3888
+    deploy:
+      <<: *resource-limits
+    networks:
+      - infra_network
+    volumes:
+      - zookeeper1-data:/data
+      - zookeeper1-datalog:/datalog
+
+  zookeeper2:
+    image: wurstmeister/zookeeper:latest
+    hostname: zookeeper2
+    ports:
+      - "2182:2181"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: *zoo-servers
+      ZOO_DATA_DIR: /data
+      ZOO_DATA_LOG_DIR: /datalog
+    deploy:
+      <<: *resource-limits
+    networks:
+      - infra_network
+    volumes:
+      - zookeeper2-data:/data
+      - zookeeper2-datalog:/datalog
+
+  zookeeper3:
+    image: wurstmeister/zookeeper:latest
+    hostname: zookeeper3
+    ports:
+      - "2183:2181"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: *zoo-servers
+      ZOO_DATA_DIR: /data
+      ZOO_DATA_LOG_DIR: /datalog
+    deploy:
+      <<: *resource-limits
+    networks:
+      - infra_network
+    volumes:
+      - zookeeper3-data:/data
+      - zookeeper3-datalog:/datalog
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:2181,zookeeper2:2181,zookeeper3:2181
+      KAFKA_LISTENERS: EXTERNAL_SAME_HOST://:29092,INTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL_SAME_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL_SAME_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - infra_network
+      - external_network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kafka-data:/kafka
+    depends_on:
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    restart: unless-stopped
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9092
+      SERVER_SERVLET_CONTEXTPATH: /
+    networks: 
+      - infra_network
+      - external_network
+    depends_on:
+      - kafka
+    ports:
+      - 9000:9000
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:latest
+    hostname: postgres
+    environment:
+      POSTGRES_DB: digital_bank
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: mypassword
+    deploy:
+      <<: *resource-limits
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks: 
+      - infra_network
+
+  adminer:
+    image: adminer:latest
+    restart: always
+    ports:
+      - 8080:8080
+    depends_on:
+      - postgres
+    networks: 
+      - infra_network
+      - external_network
+
+networks:
+  infra_network:
+    driver: bridge
+    external: false
+  
+  external_network:
+    external: false
+
+volumes:
+  zookeeper1-data:
+  zookeeper1-datalog:
+
+  zookeeper2-data:
+  zookeeper2-datalog:
+
+  zookeeper3-data:
+  zookeeper3-datalog:
+
+  kafka-data:
+
+  postgres-data:
