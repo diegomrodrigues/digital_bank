@@ -76,6 +76,7 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL_SAME_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: debezium-config:1:1,debezium-offset:1:1,debezium-status:1:1
     networks:
       - infra_network
       - external_network
@@ -128,6 +129,33 @@ services:
     networks: 
       - infra_network
       - external_network
+  
+  debezium:
+    image: debezium/connect:latest
+    restart: always
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      CONFIG_STORAGE_TOPIC: debezium-config
+      OFFSET_STORAGE_TOPIC: debezium-offset
+      STATUS_STORAGE_TOPIC: debezium-status
+      DEBEZIUM_CONFIG_CONNECTOR_CLASS: io.debezium.connector.postgresql.PostgresConnector
+      DEBEZIUM_CONFIG_DATABASE_HOSTNAME: postgres
+      DEBEZIUM_CONFIG_DATABASE_PORT: 5432
+      DEBEZIUM_CONFIG_DATABASE_PASSWORD: mypassword
+      DEBEZIUM_CONFIG_DATABASE_USER: admin
+      DEBEZIUM_CONFIG_DATABASE_SERVER_NAME: postgres
+      DEBEZIUM_CONFIG_DATABASE_DBNAME: digital_bank
+    deploy:
+      <<: *resource-limits
+    volumes:
+      - debezium-data:/kafka/data
+    ports:
+      - 8083:8083
+    depends_on:
+      - kafka
+      - postgres
+    networks: 
+      - infra_network
 
 networks:
   infra_network:
@@ -150,3 +178,5 @@ volumes:
   kafka-data:
 
   postgres-data:
+
+  debezium-data:
